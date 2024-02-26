@@ -54,4 +54,5 @@ def clean_txt(text, remove_nums = "smart", EHR = False, w2v = False):
         x = re.sub(r'(?<!\.)$', ' .', x)
 
     x = re.sub(r'\s+', ' ', x).strip() # squish: removes repeated spaces and \t, \n
+    x = x.rstrip('</s>')
     return x
