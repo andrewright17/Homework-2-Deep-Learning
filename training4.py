@@ -99,6 +99,19 @@ class training_data(Dataset):
         data += torch.Tensor(data.size()).random_(0, 2000)/10000. # add noise for regularization
         return torch.Tensor(data), torch.Tensor(sentence)
 
+# batch data for training and padding
+def minibatch(data):
+    data.sort(key=lambda x: len(x[1]), reverse=True)
+    avi_data, captions = zip(*data) 
+    avi_data = torch.stack(avi_data, 0)
+
+    lengths = [len(cap) for cap in captions]
+    targets = torch.zeros(len(captions), max(lengths)).long()
+    for i, cap in enumerate(captions):
+        end = lengths[i]
+        targets[i, :end] = cap[:end]
+    return avi_data, targets, lengths
+
 # Encoder Class
 class encoder(nn.Module):
     def __init__(self):
