@@ -30,7 +30,8 @@ def build_dictionary(filepath, label_file):
     i2w = {i + len(useful_tokens): word for i, word in enumerate(word_dict)}
     w2i = {word: i + len(useful_tokens) for i, word in enumerate(word_dict)}
     i2w.update(dict(useful_tokens))
-    w2i.update(dict(zip(t[0] for t in useful_tokens), range(len(useful_tokens))))
+    w2i.update({t[0]: i for i, t in enumerate(useful_tokens)})
+    #w2i.update(dict(zip(t[0] for t in useful_tokens), range(len(useful_tokens))))
 
     return i2w, w2i, word_dict
 
@@ -65,21 +66,26 @@ def get_avi(filepath, files_dir):
         avi_data[file.split('.npy')[0]] = value
     return avi_data
 
-### load and preprocess training data
+### load and preprocess training dataimport torch
 class TrainingData(Dataset):
     def __init__(self, filepath, label_file, files_dir, w2i, i2w=None):
+        super().__init__()
         self.filepath = filepath
         self.label_file = label_file
         self.files_dir = files_dir
         self.w2i = w2i
-        self.i2w = i2w
+        self.i2w = i2w  # Optional, unused in this class
 
         with open(filepath + label_file, "r") as f:
             label = json.load(f)
 
-        self.data_pair = [(entry["id"], text_to_indices(entry["caption"], w2i)) for entry in label]
+        self.data_pair = []
+        for entry in label:
+            for caption in entry["caption"]:  # Iterate through captions efficiently
+                indices = text_to_indices(caption, w2i)
+                self.data_pair.append((entry["id"], indices))
 
-        self.avi = get_avi(files_dir)
+        self.avi = get_avi(self.filepath, self.files_dir)
 
     def __len__(self):
         return len(self.data_pair)
@@ -88,8 +94,9 @@ class TrainingData(Dataset):
         assert idx < self.__len__()
         avi_file_name, sentence = self.data_pair[idx]
         data = torch.tensor(self.avi[avi_file_name])
-        data += torch.randn(data.size()) * 0.2  # Simplified noise addition
+        data += torch.randn_like(data) * 0.2  # More efficient noise addition
         return data, torch.tensor(sentence)
+
 
 
 # batch data for training and padding
@@ -113,26 +120,29 @@ class attention(nn.Module):
         self.attn = nn.Linear(hidden_size * 2, hidden_size)
         self.v = nn.Parameter(torch.rand(hidden_size))
     def forward(self, hidden, encoder_outputs):
+        hidden_state = hidden[0]
         seq_len = encoder_outputs.size(0)
-        hidden = hidden.repeat(seq_len, 1, 1).transpose(0, 1)
-        energy = torch.tanh(self.attn(torch.cat((hidden, encoder_outputs), dim=2)))
+        print(hidden_state.shape)
+        print(encoder_outputs.shape)
+        hidden_state = hidden_state.repeat(seq_len, 1, 1).transpose(0, 1)
+        energy = torch.tanh(self.attn(torch.cat((hidden_state, encoder_outputs), dim=2)))
         energy = energy.transpose(1, 2)
         v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)
         attention = torch.bmm(v, energy).squeeze(1)
         return F.softmax(attention, dim=1)
 
 # Encoder Class
-class encoder(nn.Module):
+class Encoder(nn.Module):
     def __init__(self):
-        super(encoder, self).__init__()
+        super(Encoder, self).__init__()
     
         self.linear = nn.Linear(4096, 512)
         self.dropout = nn.Dropout(0.3)
         self.lstm = nn.LSTM(512, 512, batch_first=True)
 
     def forward(self, input):
-        batch_size, seq_len, feat_n = input.size()    
-        input = input.view(-1, feat_n)
+        batch_size, seq_len, feat_n = input.size() 
+        input = input.view(-1, feat_n).clone().detach().type(torch.float32)
         input = self.linear(input)
         input = self.dropout(input)
         input = input.view(batch_size, seq_len, 512)
@@ -153,11 +163,11 @@ class DecoderWithAttention(nn.Module):
         self.embedding = nn.Embedding(output_size, word_dim)
         self.dropout = nn.Dropout(dropout)
         self.lstm = nn.LSTM(hidden_size + word_dim, hidden_size, batch_first=True)
-        self.attention = nn.Linear(hidden_size * 2, 1)  # Simplified attention mechanism
+        self.attention = attention(hidden_size=hidden_size)
         self.to_final_output = nn.Linear(hidden_size, output_size)
 
-    def forward(self, encoder_last_hidden_state, encoder_output, targets=None, mode='train', tr_steps=None):
-        batch_size, _ = encoder_output.size()
+    def forward(self, encoder_last_hidden_state, encoder_output, targets=None, mode='train'):
+        batch_size, _ , _ = encoder_output.size()
 
         decoder_hidden = None if encoder_last_hidden_state is None else encoder_last_hidden_state
         decoder_input = torch.ones(batch_size, 1).long().to(encoder_output.device)
@@ -165,7 +175,7 @@ class DecoderWithAttention(nn.Module):
 
         if targets is not None:  # Training mode
             targets = self.embedding(targets)
-            seq_len, _ = targets.size()
+            seq_len, _ , _ = targets.size()
 
             for i in range(seq_len - 1):
                 teacher_forcing_ratio = 0.6 if mode == 'train' else 0.0  # Fixed teacher forcing ratio
@@ -176,7 +186,7 @@ class DecoderWithAttention(nn.Module):
                 else:
                     current_input = self.embedding(decoder_input).squeeze(1)
 
-                context = F.tanh(torch.cat((decoder_hidden, encoder_output), dim=1)) @ self.attention.weight  # Efficient attention calculation
+                context = self.attention(decoder_hidden, encoder_output)
                 lstm_input = torch.cat([current_input, context], dim=1).unsqueeze(1)
                 lstm_output, decoder_hidden = self.lstm(lstm_input, decoder_hidden)
                 logprob = self.to_final_output(lstm_output.squeeze(1))
@@ -248,17 +258,17 @@ def calculate_loss(loss_fn, x, y, lengths):
     return loss
 
 ### train
-def train(model, epoch, loss_fn, optimizer, train_loader):
+def train(model, epoch, loss_fn, optimizer, train_loader, device):
     model.train()
     print(epoch)
     
     for _, batch in enumerate(train_loader):
         avi_feats, ground_truths, lengths = batch
-        avi_feats, ground_truths = avi_feats.cuda(), ground_truths.cuda()
+        avi_feats, ground_truths = avi_feats.to(device), ground_truths.to(device)
         avi_feats, ground_truths = Variable(avi_feats), Variable(ground_truths)
         
         optimizer.zero_grad()
-        seq_logProb,_ = model(avi_feats, target_sentences = ground_truths, mode = 'train', tr_steps = epoch)
+        seq_logProb,_ = model(avi_feats, target_sentences = ground_truths, mode = 'train')
         ground_truths = ground_truths[:, 1:]  
         loss = calculate_loss(loss_fn, seq_logProb, ground_truths, lengths)
         
@@ -273,6 +283,7 @@ def main():
     filepath = "../MLDS_hw2_1_data/"
     files_dir = 'training_data/feat'
     label_file = 'training_label.json'
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     i2w, w2i, word_dict = build_dictionary(filepath=filepath, label_file=label_file)
     train_dataset = TrainingData(filepath=filepath, label_file=label_file, files_dir=files_dir,
                                  w2i=w2i, i2w=i2w)
@@ -280,17 +291,17 @@ def main():
     
     epochs_n = 1 #100
 
-    encoder = encoder()
+    encoder = Encoder()
     decoder = DecoderWithAttention(512, len(i2w) +4, len(i2w) +4, 1024, 0.3)
     model = ModelClass(encoder=encoder, decoder=decoder)
     
-    model = model.cuda()
+    model = model.to(device)
     loss_fn = nn.CrossEntropyLoss()
     parameters = model.parameters()
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
     
     for epoch in range(epochs_n):
-        train(model, epoch+1, loss_fn, parameters, optimizer, train_dataloader) 
+        train(model, epoch+1, loss_fn, optimizer, train_dataloader, device) 
 
     torch.save(model, "{}/{}.h5".format('SavedModel', 'model0'))
     print("Training finished")
