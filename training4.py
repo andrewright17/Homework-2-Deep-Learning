@@ -112,6 +112,22 @@ def minibatch(data):
         targets[i, :end] = cap[:end]
     return avi_data, targets, lengths
 
+# Attention Class
+class attention(nn.Module):
+    def __init__(self, hidden_size):
+        super(attention, self).__init__()
+        self.hidden_size = hidden_size
+        self.attn = nn.Linear(hidden_size * 2, hidden_size)
+        self.v = nn.Parameter(torch.rand(hidden_size))
+    def forward(self, hidden, encoder_outputs):
+        seq_len = encoder_outputs.size(0)
+        hidden = hidden.repeat(seq_len, 1, 1).transpose(0, 1)
+        energy = torch.tanh(self.attn(torch.cat((hidden, encoder_outputs), dim=2)))
+        energy = energy.transpose(1, 2)
+        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)
+        attention = torch.bmm(v, energy).squeeze(1)
+        return nn.functional.softmax(attention, dim=1)
+
 # Encoder Class
 class encoder(nn.Module):
     def __init__(self):
@@ -133,9 +149,9 @@ class encoder(nn.Module):
         return output, hidden_state
 
 # Decoder Class
-class decoder(nn.Module):
+class DecoderWithAttention(nn.Module):
     def __init__(self, hidden_size, output_size, vocab_size, word_dim, dropout_percentage=0.3):
-        super(decoder, self).__init__()
+        super(DecoderWithAttention, self).__init__()
 
         self.hidden_size = 512
         self.output_size = output_size
