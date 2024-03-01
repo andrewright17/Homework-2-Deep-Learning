@@ -27,7 +27,7 @@ def build_dictionary(filepath, label_file):
             word_counts.update(clean.clean_txt(caption, w2v=True).split())
 
     word_dict = {word: count for word, count in word_counts.items() if count > 4}
-    useful_tokens = [('<PAD>', 0), ('<BOS>', 1), ('<EOS>', 2), ('<UNK>', 3)]
+    useful_tokens = [(0,'<PAD>'), (1,'<BOS>'), (2,'<EOS>'), (3,'<UNK>')]
 
     i2w = {i + len(useful_tokens): word for i, word in enumerate(word_dict)}
     w2i = {word: i + len(useful_tokens) for i, word in enumerate(word_dict)}
@@ -210,12 +210,12 @@ class DecoderWithAttention(nn.Module):
 
             for i in range(seq_len - 1):
                 current_input = self.embedding(decoder_input).squeeze(1)
-                context = F.tanh(torch.cat((decoder_hidden, encoder_output), dim=1)) @ self.attention.weight
+                context = self.attention(decoder_hidden, encoder_output)
                 lstm_input = torch.cat([current_input, context], dim=1).unsqueeze(1)
                 lstm_output, decoder_hidden = self.lstm(lstm_input, decoder_hidden)
                 logprob = self.to_final_output(lstm_output.squeeze(1))
                 seq_logprobs.append(logprob.unsqueeze(1))
-                decoder_input = torch.argmax(logprob, dim=2).unsqueeze(1)
+                decoder_input = logprob.unsqueeze(1).max(2)[1]
 
         seq_logprobs = torch.cat(seq_logprobs, dim=1)
         seq_predictions = seq_logprobs.max(2)[1]

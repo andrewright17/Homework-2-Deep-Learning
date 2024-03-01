@@ -1,0 +1,1 @@
+python3 model_testing.py $'../MLDS_hw2_1_data' $'testset_output.txt'

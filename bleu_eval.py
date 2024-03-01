@@ -101,8 +101,8 @@ def BLEU(s,t,flag = False):
     precisions.append(pr)
     score = geometric_mean(precisions) * bp
     return score
-
-# reference: https://github.com/vikasnar/Bleu
+### Usage: python bleu_eval.py caption.txt
+### Ref : https://github.com/vikasnar/Bleu
 if __name__ == "__main__" :
     test = json.load(open('testing_label.json','r'))
     output = sys.argv[1]
@@ -114,7 +114,7 @@ if __name__ == "__main__" :
             test_id = line[:comma]
             caption = line[comma+1:]
             result[test_id] = caption
-
+    #count by the method described in the paper https://aclanthology.info/pdf/P/P02/P02-1040.pdf
     bleu=[]
     for item in test:
         score_per_video = []
@@ -122,4 +122,6 @@ if __name__ == "__main__" :
         score_per_video.append(BLEU(result[item['id']],captions,True))
         bleu.append(score_per_video[0])
     average = sum(bleu) / len(bleu)
-    print("Average BLEU score: " + str(average))
+    print("Average bleu score is " + str(average))
+
+
