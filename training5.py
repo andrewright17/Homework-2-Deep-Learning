@@ -1,6 +1,7 @@
 ### import libraries
 import numpy as np
 import pandas as pd
+import pickle
 import random
 from scipy.special import expit
 import torch
@@ -296,11 +297,13 @@ def main():
     label_file = 'training_label.json'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     i2w, w2i, word_dict = build_dictionary(filepath=filepath, label_file=label_file)
+    with open('i2w.pkl', 'wb') as f:
+        pickle.dump(i2w, f)
     train_dataset = TrainingData(filepath=filepath, label_file=label_file, files_dir=files_dir,
                                  w2i=w2i, i2w=i2w)
     train_dataloader = DataLoader(dataset = train_dataset, batch_size=128, shuffle=True, num_workers=8, collate_fn=minibatch)
     
-    epochs_n = 1 #100
+    epochs_n = 20 #100
 
     encoder = Encoder()
     decoder = DecoderWithAttention(512, len(i2w) +4, len(i2w) +4, 1024, 0.3)
@@ -317,19 +320,7 @@ def main():
 
     end = time.time()
     torch.save(model, "{}.h5".format('modelv1_seq2seq'))
-    print("Training finished")
     print("Training finished {}  elapsed time: {: .3f} seconds. \n".format('test', end-start))
 
 if __name__ == "__main__":
     main()
-
-### Main
-#filepath = "../MLDS_hw2_1_data/"
-#files_dir = 'training_data/feat'
-#label_file = 'training_label.json'
-#i2w, w2i, word_dict = dictionary(filepath=filepath, label_file=label_file)
-#features = feature(filepath="../MLDS_hw2_1_data/")
-#train_list = get_training_list(filepath=filepath)
-#print(train_list[0])
-#annotated = annotate(filepath=filepath, label_file=label_file, word_dict=word_dict, w2i=w2i, i2w=i2w)
-#print(annotated[45])
