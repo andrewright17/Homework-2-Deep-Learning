@@ -13,6 +13,7 @@ import regex as re
 import clean_txt as clean
 import os
 from collections import Counter
+import time
 
 ### Build Dictionary
 def build_dictionary(filepath, label_file):
@@ -116,21 +117,31 @@ def minibatch(data):
 class attention(nn.Module):
     def __init__(self, hidden_size):
         super(attention, self).__init__()
+        
         self.hidden_size = hidden_size
-        self.attn = nn.Linear(hidden_size * 2, hidden_size)
-        self.v = nn.Parameter(torch.rand(hidden_size))
-    def forward(self, hidden, encoder_outputs):
-        hidden_state = hidden[0]
-        seq_len = encoder_outputs.size(0)
-        print(hidden_state.shape)
-        print(encoder_outputs.shape)
-        hidden_state = hidden_state.repeat(seq_len, 1, 1).transpose(0, 1)
-        energy = torch.tanh(self.attn(torch.cat((hidden_state, encoder_outputs), dim=2)))
-        energy = energy.transpose(1, 2)
-        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)
-        attention = torch.bmm(v, energy).squeeze(1)
-        return F.softmax(attention, dim=1)
+        self.linear1 = nn.Linear(2*hidden_size, hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        self.linear3 = nn.Linear(hidden_size, hidden_size)
+        self.linear4 = nn.Linear(hidden_size, hidden_size)
+        self.to_weight = nn.Linear(hidden_size, 1, bias=False)
 
+    def forward(self, hidden_state, encoder_outputs):
+        batch_size, seq_len, feat_n = encoder_outputs.size()
+        hidden_state = hidden_state[0]
+        hidden_state = hidden_state.view(batch_size, 1, feat_n).repeat(1, seq_len, 1)
+        matching_inputs = torch.cat((encoder_outputs, hidden_state), 2).view(-1, 2*self.hidden_size)
+
+        x = self.linear1(matching_inputs)
+        x = self.linear2(x)
+        x = self.linear3(x)
+        x = self.linear4(x)
+        attention_weights = self.to_weight(x)
+        attention_weights = attention_weights.view(batch_size, seq_len)
+        attention_weights = F.softmax(attention_weights, dim=1)
+        context = torch.bmm(attention_weights.unsqueeze(1), encoder_outputs).squeeze(1)
+        
+        return context
+    
 # Encoder Class
 class Encoder(nn.Module):
     def __init__(self):
@@ -175,7 +186,7 @@ class DecoderWithAttention(nn.Module):
 
         if targets is not None:  # Training mode
             targets = self.embedding(targets)
-            seq_len, _ , _ = targets.size()
+            _, seq_len , _ = targets.size()
 
             for i in range(seq_len - 1):
                 teacher_forcing_ratio = 0.6 if mode == 'train' else 0.0  # Fixed teacher forcing ratio
@@ -191,7 +202,7 @@ class DecoderWithAttention(nn.Module):
                 lstm_output, decoder_hidden = self.lstm(lstm_input, decoder_hidden)
                 logprob = self.to_final_output(lstm_output.squeeze(1))
                 seq_logprobs.append(logprob.unsqueeze(1))
-                decoder_input = torch.argmax(logprob, dim=2).unsqueeze(1)
+                decoder_input = logprob.unsqueeze(1).max(2)[1]
 
         else:  # Inference mode
             seq_len = 28  # Fixed maximum output sequence length
@@ -300,12 +311,15 @@ def main():
     parameters = model.parameters()
     optimizer = torch.optim.Adam(parameters, lr=0.0001)
     
+    start = time.time()
     for epoch in range(epochs_n):
         train(model, epoch+1, loss_fn, optimizer, train_dataloader, device) 
 
-    torch.save(model, "{}/{}.h5".format('SavedModel', 'model0'))
+    end = time.time()
+    torch.save(model, "{}.h5".format('model0'))
     print("Training finished")
-    
+    print("Training finished {}  elapsed time: {: .3f} seconds. \n".format('test', end-start))
+
 if __name__ == "__main__":
     main()
 
