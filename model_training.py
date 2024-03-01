@@ -303,7 +303,7 @@ def main():
                                  w2i=w2i, i2w=i2w)
     train_dataloader = DataLoader(dataset = train_dataset, batch_size=128, shuffle=True, num_workers=8, collate_fn=minibatch)
     
-    epochs_n = 20 #100
+    epochs_n = 100
 
     encoder = Encoder()
     decoder = DecoderWithAttention(512, len(i2w) +4, len(i2w) +4, 1024, 0.3)

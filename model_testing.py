@@ -73,6 +73,7 @@ def main():
         bleu.append(score_per_video[0])
     average = sum(bleu) / len(bleu)
     print("Average bleu score is " + str(average))
+    print(result['04Gt01vatkk_248_265.avi'])
 
 if __name__ == "__main__" :
     main()
