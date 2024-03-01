@@ -55,7 +55,7 @@ def main():
     with open(sys.argv[2], 'w') as f:
         for id, cap in preds:
             f.write('{},{}\n'.format(id, cap))
-    test = json.load(open('../MLDS_hw2_1_data/testing_label.json'))
+    test = json.load(open(data_dir + '/testing_label.json'))
     output = sys.argv[2]
     result = {}
     with open(output,'r') as f:
