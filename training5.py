@@ -294,7 +294,7 @@ def main():
     filepath = "../MLDS_hw2_1_data/"
     files_dir = 'training_data/feat'
     label_file = 'training_label.json'
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     i2w, w2i, word_dict = build_dictionary(filepath=filepath, label_file=label_file)
     train_dataset = TrainingData(filepath=filepath, label_file=label_file, files_dir=files_dir,
                                  w2i=w2i, i2w=i2w)
@@ -305,7 +305,7 @@ def main():
     encoder = Encoder()
     decoder = DecoderWithAttention(512, len(i2w) +4, len(i2w) +4, 1024, 0.3)
     model = ModelClass(encoder=encoder, decoder=decoder)
-    
+    model = nn.DataParallel(model)
     model = model.to(device)
     loss_fn = nn.CrossEntropyLoss()
     parameters = model.parameters()
@@ -316,7 +316,7 @@ def main():
         train(model, epoch+1, loss_fn, optimizer, train_dataloader, device) 
 
     end = time.time()
-    torch.save(model, "{}.h5".format('model0'))
+    torch.save(model, "{}.h5".format('modelv1_seq2seq'))
     print("Training finished")
     print("Training finished {}  elapsed time: {: .3f} seconds. \n".format('test', end-start))
 
