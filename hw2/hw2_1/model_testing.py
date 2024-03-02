@@ -5,8 +5,8 @@ import torch
 from torch.autograd import Variable
 import json
 from torch.utils.data import DataLoader, Dataset
-from hw2.hw2_1.bleu_eval import BLEU
-from hw2.hw2_1.model_training import *
+from bleu_eval import BLEU
+from model_training import *
 import pickle
 
 class test_data(Dataset):
