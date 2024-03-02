@@ -5,9 +5,8 @@ import torch
 from torch.autograd import Variable
 import json
 from torch.utils.data import DataLoader, Dataset
-from bleu_eval import BLEU
-from model_training import *
-#from model_training import ModelClass, Encoder, DecoderWithAttention, attention
+from hw2.hw2_1.bleu_eval import BLEU
+from hw2.hw2_1.model_training import *
 import pickle
 
 class test_data(Dataset):
@@ -73,7 +72,8 @@ def main():
         bleu.append(score_per_video[0])
     average = sum(bleu) / len(bleu)
     print("Average bleu score is " + str(average))
-    print(result['04Gt01vatkk_248_265.avi'])
+    #print(result['04Gt01vatkk_248_265.avi'])
+    #print([item['caption'] for item in test if item['id'] == '04Gt01vatkk_248_265.avi'])
 
 if __name__ == "__main__" :
     main()

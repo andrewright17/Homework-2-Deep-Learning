@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, Dataset
 import torch.nn.functional as F
 import json
 import regex as re
-import clean_txt as clean
+import hw2.hw2_1.clean_txt as clean
 import os
 from collections import Counter
 import time
